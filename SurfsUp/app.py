@@ -39,11 +39,13 @@ def welcome():
         f"/api/v1.0/precipitation<br/>"
         f"/api/v1.0/stations<br/>"
         f"/api/v1.0/tobs<br/>"
-        f'/api/v1.0/&lt;start&gt; and /api/v1.0/&lt;start&gt;/&lt;end&gt;'
+        f'/api/v1.0/&lt;start date&gt<br/>'
+        f'/api/v1.0/&lt;start date&gt;/&lt;end date&gt;'
     )
 
 @app.route("/api/v1.0/precipitation")
 def precipitation():
+    # Precipitation analysis, retrieve only the last 12 months of data
     # Create our session (link) from Python to the DB
     session = Session(engine)
 
@@ -78,6 +80,7 @@ def precipitation():
 
 @app.route("/api/v1.0/stations")
 def stations():
+    # Return a list of stations
     # Create our session (link) from Python to the DB
     session = Session(engine)
 
@@ -90,10 +93,11 @@ def stations():
         (station_name,)=record
         stations_list.append(station_name)
 
-    return jsonify(stations_list)
+    return jsonify({"stations":stations_list})
 
 @app.route("/api/v1.0/tobs")
 def tobs():
+    # Temperature observations of the most-active station for the previous year
     from sqlalchemy import desc
 
     # Create our session (link) from Python to the DB
@@ -127,16 +131,63 @@ def tobs():
         filter(Station.name == st_name).statement,
     con = engine
     )
-    #df.set_index('date',inplace=True)
-    #df.reset_index(inplace=True)
+
     session.close()
-    print(df)
+
     dict_data=df.to_dict('records')
-    print(dict_data)
+
+    return jsonify({st_name:dict_data})
+
+@app.route('/api/v1.0/<start>')
+def stat_start(start):
+    # Return a JSON list of the minimum temperature, the average temperature, and the maximum temperature for a specified start date
+    # Create our session (link) from Python to the DB
+
+    start_date=datetime.strptime(start,"%Y-%m-%d")
+
+    session = Session(engine) 
+
+    df = pd.read_sql_query(
+    sql = session.query(
+            func.min(Measurement.tobs).label("TMIN"), 
+            func.avg(Measurement.tobs).label("TAVG"), 
+            func.max(Measurement.tobs).label("TMAX")
+            ).filter(Measurement.date >= start_date).statement,
+    con = engine
+    )
+    session.close()
+
+    dict_data=df.to_dict("records") 
+
     return jsonify(dict_data)
 
-#@app.route('/api/v1.0/<start>')
-#def 
+
+@app.route('/api/v1.0/<start>/<end>')
+def stat_between(start,end):
+    # Return a JSON list of the minimum temperature, the average temperature, and the maximum temperature for a specified start date
+    # Create our session (link) from Python to the DB
+
+    start_date=datetime.strptime(start,"%Y-%m-%d")
+    end_date=datetime.strptime(end,"%Y-%m-%d")
+
+    session = Session(engine) 
+
+    df = pd.read_sql_query(
+    sql = session.query(
+            func.min(Measurement.tobs).label("TMIN"), 
+            func.avg(Measurement.tobs).label("TAVG"), 
+            func.max(Measurement.tobs).label("TMAX")
+            ).\
+            filter(Measurement.date >= start_date).\
+            filter(Measurement.date <= end_date).\
+            statement,
+    con = engine
+    )
+    session.close()
+
+    dict_data=df.to_dict("records") 
+
+    return jsonify(dict_data)
 
 if __name__ == "__main__":
     app.run(debug=True)
